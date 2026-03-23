@@ -31,7 +31,9 @@ class RegisterView(APIView):
 
         for image in serializer.validated_data["images"]:
             vector = extract_embedding_from_upload(image)
-            embedding = FaceEmbedding.objects.create(user=user, vector=vector.tolist())
+            embedding = FaceEmbedding(user=user)
+            embedding.set_vector(vector.tolist())
+            embedding.save()
             embeddings.append(vector)
             embedding_ids.append(embedding.id)
 

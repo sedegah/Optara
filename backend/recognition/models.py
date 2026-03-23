@@ -1,12 +1,21 @@
+import json
+
 from django.db import models
 
+from services.encryption import decrypt_vector, encrypt_vector
 from users.models import UserProfile
 
 
 class FaceEmbedding(models.Model):
     user = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="embeddings")
-    vector = models.JSONField()
+    encrypted_vector = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def set_vector(self, vector: list[float]) -> None:
+        self.encrypted_vector = encrypt_vector(json.dumps(vector))
+
+    def get_vector(self) -> list[float]:
+        return json.loads(decrypt_vector(self.encrypted_vector))
 
 
 class RecognitionLog(models.Model):
