@@ -4,12 +4,13 @@ from pathlib import Path
 
 from django.conf import settings
 from django.db import transaction
+from django.http import JsonResponse
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from recognition.models import FaceEmbedding, RecognitionLog
-from recognition.serializers import RecognitionLogSerializer, RecognizeSerializer, RegisterSerializer
+from recognition.serializers import RecognizeSerializer, RegisterSerializer
 from services.embeddings import extract_embedding_from_upload
 from services.faiss_index import FaissEngine
 from users.models import UserProfile
@@ -60,10 +61,21 @@ class RecognizeView(APIView):
 
         embedding = FaceEmbedding.objects.select_related("user").get(id=embedding_id)
         log = RecognitionLog.objects.create(user=embedding.user, confidence=confidence, label="MATCH")
-        return Response({"label": "MATCH", "user_id": embedding.user.id, "name": embedding.user.name, "confidence": log.confidence})
+        return Response(
+            {"label": "MATCH", "user_id": embedding.user.id, "name": embedding.user.name, "confidence": log.confidence}
+        )
 
 
-class LogsView(APIView):
-    def get(self, request):
-        logs = RecognitionLog.objects.select_related("user").order_by("-timestamp")[:100]
-        return Response(RecognitionLogSerializer(logs, many=True).data)
+def logs_view(request):
+    logs = RecognitionLog.objects.select_related("user").order_by("-timestamp")[:100]
+    payload = [
+        {
+            "id": item.id,
+            "timestamp": item.timestamp.isoformat(),
+            "user_name": item.user.name if item.user else None,
+            "confidence": item.confidence,
+            "label": item.label,
+        }
+        for item in logs
+    ]
+    return JsonResponse(payload, safe=False)

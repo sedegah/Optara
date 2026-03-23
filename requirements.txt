@@ -6,4 +6,5 @@ torch==2.5.1
 facenet-pytorch==2.6.0
 opencv-python==4.10.0.84
 Pillow==11.0.0
-streamlit==1.40.2
+requests==2.32.3
+customtkinter==5.2.2

@@ -1,88 +1,86 @@
-# Optara Facial Recognition MVP
+# Optara (Rewritten Architecture)
 
-This repository contains an **advanced MVP scaffold** for a production-style facial recognition platform using:
+Optara now uses three clean layers:
 
-- Django + Django REST Framework (API)
-- FAISS (vector matching)
-- PyTorch + facenet-pytorch (embeddings)
-- OpenCV (real-time video loop)
-- Streamlit (monitoring dashboard)
+1. **Backend (Django API only)**
+   - Pure REST API (no web UI)
+   - Handles users, embeddings, recognition events, and logs
+   - Base URL: `http://127.0.0.1:8000/api/`
 
-## Architecture
+2. **Desktop App (CustomTkinter)**
+   - Replaces Streamlit
+   - Shows live camera feed
+   - Start/stop camera controls
+   - Periodically fetches recognition logs from backend
+
+3. **AI Engine (service layer in backend)**
+   - OpenCV capture + face processing
+   - FaceNet embeddings (`facenet-pytorch`)
+   - FAISS vector matching
+
+## Common Error: `WinError 10061`
+
+`[WinError 10061] No connection could be made because the target machine actively refused it` usually means:
+
+- Django server is not running
+- Wrong host/port
+- Backend crashed during startup
+
+## Correct Startup Order
+
+### 1) Start backend
+
+```bash
+cd backend
+python manage.py runserver
+```
+
+Expect:
 
 ```text
-[ Webcam / Upload ]
-        ↓
-[ Face Detection ]
-        ↓
-[ Embedding Model ]
-        ↓
-[ FAISS Index ]
-        ↓
-[ Matching Engine ]
-        ↓
-[ Django API + Streamlit Dashboard ]
+Starting development server at http://127.0.0.1:8000/
+```
+
+Check logs endpoint:
+
+- `http://127.0.0.1:8000/api/logs/`
+
+### 2) Start desktop app
+
+```bash
+python desktop_app/main.py
+```
+
+## API Endpoints
+
+- `POST /api/register/`
+- `POST /api/recognize/`
+- `GET /api/logs/`
+
+## Install
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
 ## Project Layout
 
 ```text
 backend/
-  manage.py
   config/
   users/
   recognition/
-services/
-  embeddings.py
-  faiss_index.py
-  pipeline.py
+  services/
+desktop_app/
+  main.py
 realtime/
   webcam_recognition.py
-dashboard/
-  app.py
+storage/
 ```
-
-## Quick Start
-
-1. Create virtual environment and install dependencies:
-
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   ```
-
-2. Run migrations:
-
-   ```bash
-   python backend/manage.py migrate
-   ```
-
-3. Start API server:
-
-   ```bash
-   python backend/manage.py runserver
-   ```
-
-4. Run Streamlit dashboard:
-
-   ```bash
-   streamlit run dashboard/app.py
-   ```
-
-5. Run webcam recognition demo:
-
-   ```bash
-   python realtime/webcam_recognition.py
-   ```
-
-## API Endpoints
-
-- `POST /api/register/` — Register user and process uploaded face images.
-- `POST /api/recognize/` — Recognize a face from an uploaded image.
-- `GET /api/logs/` — Fetch recent recognition logs.
 
 ## Notes
 
-- This MVP stores FAISS index locally in `storage/faiss.index`.
-- In production, add authentication, encryption, access controls, and model hardening.
+- FAISS index persists to `storage/faiss.index`.
+- For production: add auth, encryption, consent flows, and role-based access controls.
