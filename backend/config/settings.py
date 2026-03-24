@@ -1,4 +1,8 @@
+import os
 from pathlib import Path
+
+# Fix OpenMP duplicate lib issue for Faiss/Torch on Windows
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
