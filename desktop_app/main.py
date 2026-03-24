@@ -137,9 +137,9 @@ class OptaraApp(ctk.CTk):
 
             if self.recognize_mode and self.last_recognized_box is not None:
                 x, y, w, h = self.last_recognized_box
-                color = (0, 255, 100)
-                length = int(w * 0.15)
-                t = 3
+                color = (0, 255, 120)
+                length = int(w * 0.2)
+                t = 2
 
                 # Corner Brackets
                 cv2.line(frame, (x, y), (x + length, y), color, t)
@@ -151,14 +151,31 @@ class OptaraApp(ctk.CTk):
                 cv2.line(frame, (x + w, y + h), (x + w - length, y + h), color, t)
                 cv2.line(frame, (x + w, y + h), (x + w, y + h - length), color, t)
 
-                # Sweeping Scanner Line
-                scan_y = int(y + (time.time() * 250) % h)
-                cv2.line(frame, (x, scan_y), (x + w, scan_y), (0, 200, 255), 2)
+                # Crosshair and Pulsing Target Ring
+                cx, cy = x + w // 2, y + h // 2
+                cv2.line(frame, (cx - 15, cy), (cx + 15, cy), color, 1)
+                cv2.line(frame, (cx, cy - 15), (cx, cy + 15), color, 1)
+                
+                import math
+                pulse = int(math.sin(time.time() * 5) * 8)
+                cv2.circle(frame, (cx, cy), int(w * 0.35) + pulse, (0, 180, 50), 1)
+
+                # Sci-Fi Data Readouts
+                cv2.putText(frame, f"SYS.TRACK.ID: {id(self.last_recognized_box)%10000}", (x + w + 15, y + 20), cv2.FONT_HERSHEY_PLAIN, 1, (0, 200, 255), 1)
+                cv2.putText(frame, f"W:{w} H:{h} T:{int(time.time()%100)}", (x + w + 15, y + 40), cv2.FONT_HERSHEY_PLAIN, 1, (0, 200, 255), 1)
+
+                # Sweeping Scanner Line (Removed)
 
                 if self.last_recognized_name:
-                    txt_size = cv2.getTextSize(self.last_recognized_name, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
-                    cv2.rectangle(frame, (x, y - 30), (x + txt_size[0] + 10, y), (0, 0, 0), cv2.FILLED)
-                    cv2.putText(frame, self.last_recognized_name, (x + 5, y - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+                    is_unknown = "Unknown" in self.last_recognized_name
+                    txt_color = (0, 0, 255) if is_unknown else color
+                    bg_color = (30, 0, 0) if is_unknown else (0, 30, 0)
+                    
+                    text = f"TARGET: {self.last_recognized_name}"
+                    txt_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_DUPLEX, 0.6, 1)[0]
+                    cv2.rectangle(frame, (x, y - 35), (x + txt_size[0] + 15, y - 5), bg_color, cv2.FILLED)
+                    cv2.rectangle(frame, (x, y - 35), (x + txt_size[0] + 15, y - 5), txt_color, 1)
+                    cv2.putText(frame, text, (x + 5, y - 12), cv2.FONT_HERSHEY_DUPLEX, 0.6, txt_color, 1)
 
             self.last_frame = frame.copy()
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
