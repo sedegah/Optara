@@ -66,24 +66,55 @@ class OptaraApp(ctk.CTk):
         self.last_recognized_box = None
 
         self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        self.profile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_profileface.xml")
+
+    def detect_face(self, gray):
+        faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=5, minSize=(80, 80))
+        if len(faces) > 0:
+            return faces
+        
+        # Check for side profiles (OpenCV profile cascade only looks left)
+        faces = self.profile_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(80, 80))
+        if len(faces) > 0:
+            return faces
+        
+        # Check flipped image for right side profiles
+        gray_flipped = cv2.flip(gray, 1)
+        faces_flipped = self.profile_cascade.detectMultiScale(gray_flipped, scaleFactor=1.1, minNeighbors=4, minSize=(80, 80))
+        if len(faces_flipped) > 0:
+            w_img = gray.shape[1]
+            return [(w_img - x - w, y, w, h) for (x, y, w, h) in faces_flipped]
+            
+        return []
 
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.refresh_logs()
 
     def start_camera(self) -> None:
-        if self.running:
+        if self.running or getattr(self, "camera_starting", False):
             return
 
-        self.cap = cv2.VideoCapture(0)
+        self.camera_starting = True
+        self.start_btn.configure(text="Starting...", state="disabled")
+        self.append_log("Initializing camera hardware...")
+        threading.Thread(target=self._init_camera, daemon=True).start()
+
+    def _init_camera(self) -> None:
+        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         if not self.cap.isOpened():
-            self.append_log("Failed to open camera.")
-            self.cap.release()
-            self.cap = None
+            self.cap = cv2.VideoCapture(0)
+            
+        if not self.cap.isOpened():
+            self.after(0, lambda: self.append_log("Failed to open camera."))
+            self.camera_starting = False
+            self.after(0, lambda: self.start_btn.configure(text="Start Camera", state="normal"))
             return
 
         self.running = True
-        self.append_log("Camera started.")
-        self.update_frame()
+        self.camera_starting = False
+        self.after(0, lambda: self.start_btn.configure(text="Start Camera", state="normal"))
+        self.after(0, lambda: self.append_log("Camera started successfully."))
+        self.after(0, self.update_frame)
 
     def stop_camera(self) -> None:
         self.running = False
@@ -151,7 +182,7 @@ class OptaraApp(ctk.CTk):
 
     def collect_face_sample(self, frame) -> None:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=5, minSize=(80, 80))
+        faces = self.detect_face(gray)
         if len(faces) == 0:
             return
 
@@ -224,23 +255,30 @@ class OptaraApp(ctk.CTk):
             self.append_log(f"API Error: {exc}")
 
     def refresh_logs(self) -> None:
+        threading.Thread(target=self._fetch_logs_thread, daemon=True).start()
+        self.after(REFRESH_INTERVAL_MS, self.refresh_logs)
+
+    def _fetch_logs_thread(self) -> None:
         try:
-            response = requests.get(f"{API_BASE}/logs/", timeout=5)
+            response = requests.get(f"{API_BASE}/logs/", timeout=3)
             response.raise_for_status()
             logs = response.json()
-            self.status_label.configure(text="API: online")
-
-            self.log_box.delete("1.0", "end")
-            for log in logs[:20]:
-                user_name = log.get("user_name") or "UNKNOWN"
-                confidence = log.get("confidence", 0)
-                timestamp = log.get("timestamp", "")
-                self.log_box.insert("end", f"{timestamp} | {user_name} | conf={confidence:.3f}\n")
+            self.after(0, lambda: self._update_logs_ui(logs))
         except Exception as exc:
-            self.status_label.configure(text="API: offline")
-            self.append_log(f"API Error: {exc}")
+            self.after(0, lambda: self._update_logs_ui_error(str(exc)))
 
-        self.after(REFRESH_INTERVAL_MS, self.refresh_logs)
+    def _update_logs_ui(self, logs):
+        self.status_label.configure(text="API: online")
+        self.log_box.delete("1.0", "end")
+        for log in logs[:20]:
+            user_name = log.get("user_name") or "UNKNOWN"
+            confidence = log.get("confidence", 0)
+            timestamp = log.get("timestamp", "")
+            self.log_box.insert("end", f"{timestamp} | {user_name} | conf={confidence:.3f}\n")
+
+    def _update_logs_ui_error(self, err):
+        self.status_label.configure(text="API: offline")
+        self.append_log(f"API Error: {err}")
 
     def append_log(self, message: str) -> None:
         time_str = datetime.utcnow().strftime("%H:%M:%S")
@@ -265,10 +303,14 @@ class OptaraApp(ctk.CTk):
 
     def process_recognition(self, frame) -> None:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5, minSize=(80, 80))
+        faces = self.detect_face(gray)
         if len(faces) == 0:
-            self.last_recognized_box = None
+            self.missed_frames = getattr(self, "missed_frames", 0) + 1
+            if self.missed_frames > 20:
+                self.last_recognized_box = None
             return
+
+        self.missed_frames = 0
 
         x, y, w, h = max(faces, key=lambda box: box[2] * box[3])
         self.last_recognized_box = (x, y, w, h)

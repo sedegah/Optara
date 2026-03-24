@@ -30,12 +30,20 @@ class RegisterView(APIView):
         embedding_ids = []
 
         for image in serializer.validated_data["images"]:
-            vector = extract_embedding_from_upload(image)
+            try:
+                vector = extract_embedding_from_upload(image)
+            except ValueError:
+                continue
+
             embedding = FaceEmbedding(user=user)
             embedding.set_vector(vector.tolist())
             embedding.save()
             embeddings.append(vector)
             embedding_ids.append(embedding.id)
+
+        if not embeddings:
+            user.delete()
+            return Response({"error": "No valid faces detected in any uploaded images by backend."}, status=status.HTTP_400_BAD_REQUEST)
 
         faiss_engine.add(embeddings, embedding_ids)
         return Response({"user_id": user.id, "embedding_count": len(embeddings)}, status=status.HTTP_201_CREATED)
